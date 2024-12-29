@@ -1,109 +1,149 @@
-import { StyleSheet, Image, Platform } from 'react-native';
+import { View, StyleSheet, Button, Platform, Text, FlatList, Image, TouchableOpacity } from 'react-native';
+import * as Print from 'expo-print';
+import React, { useEffect, useState } from 'react';
+import { shareAsync } from 'expo-sharing';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Collapsible } from '@/components/Collapsible';
-import { ExternalLink } from '@/components/ExternalLink';
-import ParallaxScrollView from '@/components/ParallaxScrollView';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
-import { IconSymbol } from '@/components/ui/IconSymbol';
 
-export default function TabTwoScreen() {
+const html = `
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
+  </head>
+  <body style="text-align: center;">
+    <h1 style="font-size: 50px; font-family: Helvetica Neue; font-weight: normal;">
+      Hello Expo!
+    </h1>
+    <img
+      src="https://d30j33t1r58ioz.cloudfront.net/static/guides/sdk.png"
+      style="width: 90vw;" />
+    <p style="font-size: 16px; font-family: Helvetica Neue; font-weight: normal;">Lorem, ipsum dolor sit amet consectetur adipisicing elit. Ab ut nobis totam, hic magnam quibusdam? Animi consequatur dignissimos soluta, pariatur blanditiis voluptatem dicta in quod provident aspernatur beatae temporibus maiores!</p>
+  </body>
+</html>
+`;
+
+const imagesDir = FileSystem.documentDirectory + "upload/images/";
+const ensureDirExist = async () => {
+  const dirInfo = await FileSystem.getInfoAsync(imagesDir)
+  if(!dirInfo.exists) {
+   await FileSystem.makeDirectoryAsync(imagesDir, {intermediates: true})
+  }
+}
+
+export default function ExploreScreen() {
+  const [images, setImages] = useState<string[]>([])
+  const [isLoading, setIsLoading] = useState<boolean>(true)
+
+  useEffect(() => {
+    loadImages()
+  }, [])
+
+  const loadImages = async () => {
+    ensureDirExist()
+    const files = await FileSystem.readDirectoryAsync(imagesDir)
+    setImages(files.map(file => imagesDir + file))
+  }
+
+  const print = async () => {
+    // On iOS/android prints the given html. On web prints the HTML from the current page.
+    await Print.printAsync({
+      html,
+    });
+  };
+
+  const printToFile = async () => {
+    // On iOS/android prints the given html. On web prints the HTML from the current page.
+    const { uri } = await Print.printToFileAsync({ html });
+    console.log('File has been saved to:', uri);
+
+    await shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
+  };
+
+  const pickImage = async () => {
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 1,
+    });
+
+    try {
+      const imageUri = result.assets![0].uri
+      // uploadImage(imageUri)
+      saveImage(imageUri)
+    } catch (error) {
+      console.error("Gagal membuat File:", error);
+    }
+    
+  };
+
+  const saveImage = async (imageUri: string) => {
+    ensureDirExist()
+    const filename = Date.now() + ".jpg"
+    const dest = imagesDir + filename
+    await FileSystem.copyAsync({from: imageUri, to:dest})
+    setImages([...images, dest])
+  } 
+
+  const uploadImage = async (imageUri: string) => {
+    const response = await FileSystem.uploadAsync("http://10.0.0.28:3000/upload", imageUri, {
+      httpMethod: "POST",
+      uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+      fieldName: "avatar"
+    })
+    if(response.status !== 200) throw new Error("Something was wrong!")
+  }
+
+  const deleteImage = async (imageUri: string) => {
+    await FileSystem.deleteAsync(imageUri)
+    setImages(state => state.filter(imgUri => imgUri !== imageUri))
+  }
+
+  const renderItem = ({item} : {item: string}) => {
+    return <View style={{marginTop: 10, flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between"}}>
+      <Image source={{uri: item}} style={{width: 100, height: 100, objectFit: "cover"}} />
+      <View style={{flexDirection: "row", columnGap: 5}}>
+        <TouchableOpacity onPress={() => uploadImage(item)} style={{padding: 5, backgroundColor: "#bfdbfe", width: 100}}>
+          <Text style={{textAlign: "center"}}>Upload</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => deleteImage(item)} style={{padding: 5, backgroundColor: "#bfdbfe", width: 100}}>
+          <Text style={{textAlign: "center"}}>Delete</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  }
+
+  console.log(images)
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
-      headerImage={
-        <IconSymbol
-          size={310}
-          color="#808080"
-          name="chevron.left.forwardslash.chevron.right"
-          style={styles.headerImage}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Explore</ThemedText>
-      </ThemedView>
-      <ThemedText>This app includes example code to help you get started.</ThemedText>
-      <Collapsible title="File-based routing">
-        <ThemedText>
-          This app has two screens:{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/explore.tsx</ThemedText>
-        </ThemedText>
-        <ThemedText>
-          The layout file in <ThemedText type="defaultSemiBold">app/(tabs)/_layout.tsx</ThemedText>{' '}
-          sets up the tab navigator.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/router/introduction">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Android, iOS, and web support">
-        <ThemedText>
-          You can open this project on Android, iOS, and the web. To open the web version, press{' '}
-          <ThemedText type="defaultSemiBold">w</ThemedText> in the terminal running this project.
-        </ThemedText>
-      </Collapsible>
-      <Collapsible title="Images">
-        <ThemedText>
-          For static images, you can use the <ThemedText type="defaultSemiBold">@2x</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">@3x</ThemedText> suffixes to provide files for
-          different screen densities
-        </ThemedText>
-        <Image source={require('@/assets/images/react-logo.png')} style={{ alignSelf: 'center' }} />
-        <ExternalLink href="https://reactnative.dev/docs/images">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Custom fonts">
-        <ThemedText>
-          Open <ThemedText type="defaultSemiBold">app/_layout.tsx</ThemedText> to see how to load{' '}
-          <ThemedText style={{ fontFamily: 'SpaceMono' }}>
-            custom fonts such as this one.
-          </ThemedText>
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/versions/latest/sdk/font">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Light and dark mode components">
-        <ThemedText>
-          This template has light and dark mode support. The{' '}
-          <ThemedText type="defaultSemiBold">useColorScheme()</ThemedText> hook lets you inspect
-          what the user's current color scheme is, and so you can adjust UI colors accordingly.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Animations">
-        <ThemedText>
-          This template includes an example of an animated component. The{' '}
-          <ThemedText type="defaultSemiBold">components/HelloWave.tsx</ThemedText> component uses
-          the powerful <ThemedText type="defaultSemiBold">react-native-reanimated</ThemedText>{' '}
-          library to create a waving hand animation.
-        </ThemedText>
-        {Platform.select({
-          ios: (
-            <ThemedText>
-              The <ThemedText type="defaultSemiBold">components/ParallaxScrollView.tsx</ThemedText>{' '}
-              component provides a parallax effect for the header image.
-            </ThemedText>
-          ),
-        })}
-      </Collapsible>
-    </ParallaxScrollView>
+    <SafeAreaView style={styles.container}>
+      <Button title="Print" onPress={print} />
+      <Button title="Print to PDF file" onPress={printToFile} />
+      <Button title='Upload' onPress={pickImage} />
+
+      <View style={styles.imgList}>
+        <Text>My Images:</Text>
+        <FlatList data={images} keyExtractor={(_, i) => i.toString()} renderItem={renderItem}  />
+      </View>
+    </SafeAreaView>
   );
 }
 
+
+
 const styles = StyleSheet.create({
-  headerImage: {
-    color: '#808080',
-    bottom: -90,
-    left: -35,
-    position: 'absolute',
+  container: {
+    flex: 1,
+    backgroundColor: '#ecf0f1',
+    padding: 8,
+    paddingTop: 20,
+    rowGap: 15
   },
-  titleContainer: {
-    flexDirection: 'row',
-    gap: 8,
+  imgList: {
+    marginTop: 30
+  },
+  printer: {
+    textAlign: 'center',
   },
 });
